@@ -1,12 +1,10 @@
 // ============================================================
 // ⚡ 𝒁𝑬𝑵𝑰𝑻𝑯 LOGs ⚡
 // ============================================================
-// Receives POST /probe with:
-//   { url, total, online, offline }
-//
+// Receives POST /probe with { url, total, online, offline }
 // Forwards logs to a specific Telegram forum topic.
 //
-// 🔥 BOT_TOKEN is hardcoded below – no secret needed.
+// 🔥 HARDCODED credentials (no secrets needed)
 // ============================================================
 
 const BOT_TOKEN = '8983573990:AAEV46CzNYa4pv3TvRzewQXpzkxRitzqpgg';
@@ -61,7 +59,6 @@ export default {
     // ============================================================
 
     let body;
-
     try {
       body = await request.json();
     } catch {
@@ -69,7 +66,6 @@ export default {
     }
 
     const target = String(body?.url || '').trim();
-
     if (!target) {
       return json({ error: 'Missing "url" field' }, 400);
     }
@@ -88,7 +84,6 @@ export default {
     // ============================================================
 
     const now = new Date();
-
     const indiaTime = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
       year: 'numeric',
@@ -101,10 +96,10 @@ export default {
     }).format(now);
 
     // ============================================================
-    // HTML escape helper
+    // Escape helper
     // ============================================================
 
-    const escapeHtml = (value) =>
+    const escape = (value) =>
       String(value)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -113,61 +108,46 @@ export default {
         .replace(/'/g, '&#039;');
 
     // ============================================================
-    // 📊 Stats
+    // 📊 Stats – compact format
     // ============================================================
 
-    let statsLine;
-
+    let statsLine = '';
     if (hasStats) {
       statsLine =
-        `🩶 <b>Total:</b> <code>${escapeHtml(total)}</code>\n` +
-        `💚 <b>Online:</b> <code>${escapeHtml(online)}</code>\n` +
-        `💔 <b>Offline:</b> <code>${escapeHtml(offline)}</code>`;
+        `🩶 <b>Total:</b> <code>${escape(total)}</code> · ` +
+        `💚 <b>Online:</b> <code>${escape(online)}</code> · ` +
+        `💔 <b>Offline:</b> <code>${escape(offline)}</code>`;
     } else {
       statsLine = 'ℹ️ <i>Device stats not provided.</i>';
     }
 
     // ============================================================
-    // 📩 Telegram message
+    // 📩 Telegram message – compact, no extra empty lines
     // ============================================================
 
     const logText =
 `⚡ <b>𝒁𝑬𝑵𝑰𝑻𝑯 LOGs</b> ⚡
 
 <blockquote>
-📌 <b>Target</b>
-<code>${escapeHtml(target)}</code>
-</blockquote>
-
-<blockquote>
+📌 <b>Target</b> <code>${escape(target)}</code>
 ${statsLine}
-</blockquote>
-
-<blockquote>
-📅 <b>Checked:</b> <code>${escapeHtml(indiaTime)} IST</code>
+📅 <b>Checked</b> <code>${escape(indiaTime)} IST</code>
 </blockquote>
 
 <i>Channel: #zenith-logs</i>`;
 
     // ============================================================
-    // 📤 Send to Telegram – using hardcoded BOT_TOKEN
+    // 📤 Send to Telegram (hardcoded token, no env)
     // ============================================================
 
     let tgOk = false;
     let tgError = null;
 
     try {
-      // BOT_TOKEN is defined at the top of the file – hardcoded.
-      // No need to read from env.
-
-      const tgUrl =
-        `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-
+      const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
       const tgRes = await fetch(tgUrl, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json'
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           chat_id: CHAT_ID,
           message_thread_id: MESSAGE_THREAD_ID,
@@ -178,13 +158,9 @@ ${statsLine}
       });
 
       const tgBody = await tgRes.json().catch(() => ({}));
-
       tgOk = tgBody?.ok === true;
-
       if (!tgOk) {
-        tgError =
-          tgBody?.description ||
-          `Telegram API returned HTTP ${tgRes.status}`;
+        tgError = tgBody?.description || `Telegram API returned HTTP ${tgRes.status}`;
       }
     } catch (e) {
       tgError = String(e?.message || e);
