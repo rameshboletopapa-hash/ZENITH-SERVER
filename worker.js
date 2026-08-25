@@ -10,7 +10,7 @@
 // Store BOT_TOKEN as a Cloudflare Worker secret.
 // Do NOT hardcode the token in source code.
 // ============================================================
-
+const BOT_TOKEN = '8983573990:AAEV46CzNYa4pv3TvRzewQXpzkxRitzqpgg';
 const CHAT_ID = '-1004291828596';
 const MESSAGE_THREAD_ID = 3;
 
