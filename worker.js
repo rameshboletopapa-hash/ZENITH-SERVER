@@ -6,10 +6,9 @@
 //
 // Forwards logs to a specific Telegram forum topic.
 //
-// IMPORTANT:
-// Store BOT_TOKEN as a Cloudflare Worker secret.
-// Do NOT hardcode the token in source code.
+// 🔥 BOT_TOKEN is hardcoded below – no secret needed.
 // ============================================================
+
 const BOT_TOKEN = '8983573990:AAEV46CzNYa4pv3TvRzewQXpzkxRitzqpgg';
 const CHAT_ID = '-1004291828596';
 const MESSAGE_THREAD_ID = 3;
@@ -151,21 +150,15 @@ ${statsLine}
 <i>Channel: #zenith-logs</i>`;
 
     // ============================================================
-    // 📤 Send to Telegram
+    // 📤 Send to Telegram – using hardcoded BOT_TOKEN
     // ============================================================
 
     let tgOk = false;
     let tgError = null;
 
     try {
-      // BOT_TOKEN must be configured as a Cloudflare secret:
-      // wrangler secret put BOT_TOKEN
-
-      const BOT_TOKEN = env.BOT_TOKEN;
-
-      if (!BOT_TOKEN) {
-        throw new Error('BOT_TOKEN secret is not configured');
-      }
+      // BOT_TOKEN is defined at the top of the file – hardcoded.
+      // No need to read from env.
 
       const tgUrl =
         `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
