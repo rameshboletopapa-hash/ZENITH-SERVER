@@ -44,6 +44,7 @@ export default {
       );
     }
 
+    // Only /probe is supported
     if (url.pathname !== '/probe') {
       return new Response('Not found', {
         status: 404,
@@ -51,20 +52,15 @@ export default {
       });
     }
 
+    // POST only
     if (request.method !== 'POST') {
-      return new Response(
-        JSON.stringify({ error: 'Use POST' }),
-        {
-          status: 405,
-          headers: {
-            'content-type': 'application/json',
-            ...corsHeaders()
-          }
-        }
-      );
+      return json({ error: 'Use POST' }, 405);
     }
 
+    // ============================================================
     // Parse body
+    // ============================================================
+
     let body;
 
     try {
@@ -105,7 +101,10 @@ export default {
       hour12: true
     }).format(now);
 
+    // ============================================================
     // HTML escape helper
+    // ============================================================
+
     const escapeHtml = (value) =>
       String(value)
         .replace(/&/g, '&amp;')
@@ -122,11 +121,11 @@ export default {
 
     if (hasStats) {
       statsLine =
-        `> 🩶 <b>Total:</b> <code>${total}</code>\n` +
-        `> 💚 <b>Online:</b> <code>${online}</code>\n` +
-        `> 💔 <b>Offline:</b> <code>${offline}</code>`;
+        `🩶 <b>Total:</b> <code>${escapeHtml(total)}</code>\n` +
+        `💚 <b>Online:</b> <code>${escapeHtml(online)}</code>\n` +
+        `💔 <b>Offline:</b> <code>${escapeHtml(offline)}</code>`;
     } else {
-      statsLine = '> ℹ️ <i>Device stats not provided.</i>';
+      statsLine = 'ℹ️ <i>Device stats not provided.</i>';
     }
 
     // ============================================================
@@ -142,7 +141,7 @@ export default {
 </blockquote>
 
 <blockquote>
-${statsLine.replace(/^> /gm, '')}
+${statsLine}
 </blockquote>
 
 <blockquote>
@@ -159,8 +158,9 @@ ${statsLine.replace(/^> /gm, '')}
     let tgError = null;
 
     try {
-      // BOT_TOKEN should be configured as a Cloudflare secret:
+      // BOT_TOKEN must be configured as a Cloudflare secret:
       // wrangler secret put BOT_TOKEN
+
       const BOT_TOKEN = env.BOT_TOKEN;
 
       if (!BOT_TOKEN) {
@@ -179,25 +179,22 @@ ${statsLine.replace(/^> /gm, '')}
           chat_id: CHAT_ID,
           message_thread_id: MESSAGE_THREAD_ID,
           text: logText,
-
-          // HTML provides reliable blockquote formatting
           parse_mode: 'HTML',
-
           disable_web_page_preview: true
         })
       });
 
       const tgBody = await tgRes.json().catch(() => ({}));
 
-      tgOk = !!tgBody.ok;
+      tgOk = tgBody?.ok === true;
 
       if (!tgOk) {
         tgError =
-          tgBody.description ||
-          'Telegram API error';
+          tgBody?.description ||
+          `Telegram API returned HTTP ${tgRes.status}`;
       }
     } catch (e) {
-      tgError = String(e.message || e);
+      tgError = String(e?.message || e);
     }
 
     // ============================================================
@@ -246,5 +243,4 @@ function json(obj, status = 200) {
       }
     }
   );
-}  });
 }
